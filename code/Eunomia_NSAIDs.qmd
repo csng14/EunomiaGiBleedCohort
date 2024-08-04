@@ -1,5 +1,5 @@
 ---
-title: "NSAIDs patients using Eunomia: an exploratory analysis"
+title: "Patients with NSAIDs using Eunomia: an exploratory analysis"
 author: "Carmen Ng"
 title-block-banner: true
 theme: yeti
@@ -17,19 +17,14 @@ Conducted exploratory analysis on patients initiating NSAIDs using synthetic OMO
 Demographics:
 
 -   Age and gender distribution
-
--   Baseline conditions
-
 -   Baseline drug use
-
+-   Baseline conditions
 -   Post-index outcomes, particularly GI bleeding (Condition Concept ID 192671)
 
 Methodology:
 
 -   Used Quarto for dynamic reporting
-
 -   Created visual representations for clarity
-
 -   Organized code and documentation in GitHub repository
 
 Analysis provides insights into NSAID initiation patterns and potential outcomes, contributing to healthcare analytics discussions on NSAID safety.
@@ -38,6 +33,7 @@ Analysis provides insights into NSAID initiation patterns and potential outcomes
 knitr::opts_chunk$set(echo = FALSE)
 library(Eunomia)
 library(DatabaseConnector)
+library(tidyverse)
 library(knitr)
 library(kableExtra)
 library(dplyr)
@@ -127,10 +123,7 @@ x %>%
 
 ```{r}
 query_drug <- "SELECT 
-  de.person_id,
-  de.drug_concept_id,
-  de.drug_era_start_date,
-  de.drug_era_end_date,
+  de.*,
   coh.cohort_start_date,
   c.concept_name AS drug_name
 FROM 
@@ -160,8 +153,9 @@ On average, patients took **`r round(mean(drug_n$count),0)`** medications.
 #### Table 2. NSAIDs used in patients
 
 ```{r}
- drug_nsaid <- drug %>% distinct(PERSON_ID, DRUG_NAME) %>%
-   filter(DRUG_NAME %in% c("Aspirin", "celecoxib", "Diclofenac", "Ibuprofen", "Naproxen")) %>%
+ drug_nsaid <- drug %>% 
+  distinct(PERSON_ID, DRUG_NAME) %>%
+  filter(DRUG_NAME %in% c("Aspirin", "celecoxib", "Diclofenac", "Ibuprofen", "Naproxen")) %>%
      group_by(DRUG_NAME) %>%
    summarise(COUNT=n()) %>%
    mutate(`PERCENTAGE (%)` = round(COUNT/nrow(NSAIDs)*100,1)) %>%
@@ -194,9 +188,7 @@ drug_x_nsaid %>%
 
 ```{r}
 query_obs<- "SELECT 
-  obs.person_id,
-  obs.observation_concept_id,
-  obs.observation_date,
+  obs.*,
   coh.cohort_start_date,
   obs_concept_syn.concept_synonym_name AS obs_name
 FROM 
@@ -238,10 +230,7 @@ obs_10 %>%
 
 ```{r}
 query_condition <- "SELECT 
-  ce.person_id,
-  ce.condition_concept_id,
-  ce.condition_era_start_date,
-  ce.condition_era_end_date,
+  ce.*,
   coh.cohort_start_date,
   condition_concept.concept_name AS condition_name,
   condition_concept.domain_id AS domain
@@ -316,10 +305,7 @@ condition_gender_select %>% plot_ly(
 
 ```{r echo = FALSE, message=FALSE}
 query_condition_post <- "SELECT
-  ce.person_id,
-  ce.condition_concept_id,
-  ce.condition_era_start_date,
-  ce.condition_era_end_date,
+  ce.*,
   coh.cohort_start_date,
   condition_concept.concept_name AS condition_name,
   condition_concept.domain_id AS domain
@@ -347,10 +333,7 @@ condition_post_n <- condition_post %>% distinct(PERSON_ID, CONDITION_NAME) %>%
 ::: scrolling
 ```{r echo=FALSE, message=FALSE}
 query_condition_ob <- "SELECT
-  co.person_id,
-  co.condition_concept_id,
-  co.condition_start_date,
-  co.condition_end_date,
+  co.*,
   coh.cohort_start_date,
   condition_concept.concept_name AS condition_name,
   condition_concept.domain_id AS domain
@@ -427,7 +410,7 @@ condition_all_select %>% plot_ly(
     tickmode = "array"))
 ```
 
-#### Patients with GI Bleed
+##### Patients with GI Bleed
 
 ```{r, message=FALSE}
 GI <- condition_post %>% 
@@ -436,3 +419,37 @@ GI <- condition_post %>%
 ```
 
 The incidence of GI bleeding increased from **`r comma(nrow(condition[condition$CONDITION_CONCEPT_ID == 192671,])/nrow(demo))`%** to **`r comma(nrow(GI)/nrow(demo)*100)`%** following NSAID initiation.
+
+#### Table 7. Conditions that have increased post-NSAID use.
+
+::: scrolling
+```{r, message=FALSE, echo=FALSE}
+condition_increase <- condition_all %>% 
+  full_join(condition_post_all) %>%
+  mutate_all(tidyr::replace_na,0) %>%
+  filter(COUNT_PRE < COUNT_POST) %>%
+  mutate(PERCENTAGE_INCREASE = round((COUNT_POST/nrow(demo) - COUNT_PRE/nrow(demo))*100,1)) %>%
+  arrange(CONDITION_NAME) 
+
+condition_increase %>%
+  kbl() %>%
+  kable_styling(bootstrap_options = c("striped", "hover")) 
+
+```
+:::
+
+### Future analysis
+
+Our analysis has provided valuable insights into NSAID initiation and its correlation with GI bleeding. However, to gain a more comprehensive understanding, I propose further investigation into the following areas:
+
+**Drug Strength and Duration of Use:** Analyze the impact of NSAID dosage and treatment length on GI bleeding risk, including time-to-event analysis.
+
+**Adherence to Treatment:** Evaluate patient compliance using pharmacy refill data and its relationship to adverse events.
+
+**Specific NSAID types**: Compare the risk profiles of different NSAID types (e.g., ibuprofen, naproxen, diclofenac) to identify if certain drugs carry higher risks.
+
+**Healthcare utilization patterns:** Examine how factors like frequency of doctor visits or hospitalizations correlate with NSAID use and GI bleeding events.
+
+**Long-term outcomes:** Conduct a longitudinal study to assess long-term consequences of NSAID use and GI bleeding events on patient health and quality of life.
+
+These additional analyses will provide a deeper understanding of NSAID-related risks and inform strategies to enhance patient safety and optimize prescribing practices.
