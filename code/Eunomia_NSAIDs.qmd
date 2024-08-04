@@ -1,0 +1,400 @@
+---
+title: "NSAIDs patients using Eunomia"
+author: "Carmen Ng"
+title-block-banner: true
+theme: yeti
+format: html
+editor: visual
+---
+
+```{r setup, echo=FALSE, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+library(Eunomia)
+library(DatabaseConnector)
+library(knitr)
+library(kableExtra)
+library(dplyr)
+library(ggplot2)
+library(shiny)
+library(plotly)
+library(crosstalk)
+library(table1)
+  
+# set connection details for Eunomia
+connectionDetails <- getEunomiaConnectionDetails()
+# connect to Eunomia GiBleed
+connection <- connect(connectionDetails)
+# Build GiBleed Cohorts
+createCohorts(connectionDetails = connectionDetails)
+```
+
+```{=html}
+<style>
+.table-hover > tbody > tr:hover { 
+  background-color: #70baff;
+}
+.scrolling {
+  max-height: 500px;
+  overflow-y: auto;
+}
+</style>
+```
+## Study population
+
+```{r}
+sql <- "SELECT * FROM main.cohort WHERE COHORT_DEFINITION_ID = 4;"
+NSAIDs <- querySql(connection = connection, sql = sql) |>
+  as.data.frame()
+
+query_demo <- "SELECT person.*, concept.concept_name AS gender 
+FROM person 
+LEFT JOIN concept AS concept
+  ON person.GENDER_CONCEPT_ID=concept.CONCEPT_ID
+WHERE person.person_id IN (
+    SELECT subject_id
+    FROM main.cohort
+    WHERE COHORT_DEFINITION_ID = 4
+);"
+
+demo <- querySql(connection = connection, sql = query_demo) |>
+  as.data.frame()
+
+demo <- demo %>%
+  left_join(NSAIDs, by=c("PERSON_ID" = "SUBJECT_ID")) %>%
+  mutate(age = as.numeric(as.Date(COHORT_START_DATE)-as.Date(BIRTH_DATETIME))/365.25)
+
+comma <- function(x) format(x, digits = 2, big.mark = ",")
+
+```
+
+There are `r comma(nrow(NSAIDs))` patients in the cohort who initiated NSAID use.
+
+#### Table 1. Characteristics of patients using NSAIDs
+
+```{r, message=FALSE, warning=FALSE}
+pvalue <- function(x, ...) {
+  x <- x[-length(x)]  # Remove "overall" group
+  # Construct vectors of data y, and groups (strata) g
+  y <- unlist(x)
+  g <- factor(rep(1:length(x), times=sapply(x, length)))
+  if (is.numeric(y)) {
+    # For numeric variables, perform an ANOVA
+    p <- summary(aov(y ~ g))[[1]][["Pr(>F)"]][1]
+  } else {
+    # For categorical variables, perform a chi-squared test of independence
+    p <- chisq.test(table(y, g))$p.value
+  }
+  # Format the p-value, using an HTML entity for the less-than sign.
+  # The initial empty string places the output on the line below the variable label.
+  c("", sub("<", "&lt;", format.pval(p, digits=3, eps=0.001)))
+}
+
+x <- table1(~age+RACE_SOURCE_VALUE| GENDER, data=demo,extra.col=list(`P-value`=pvalue), extra.col.pos=3)
+
+x %>%
+  kbl() %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+## Drug use at baseline
+
+```{r}
+query_drug <- "SELECT 
+  de.person_id,
+  de.drug_concept_id,
+  de.drug_era_start_date,
+  de.drug_era_end_date,
+  coh.cohort_start_date,
+  c.concept_name AS drug_name
+FROM 
+  drug_era de
+JOIN 
+  main.cohort coh
+  ON de.person_id = coh.subject_id
+LEFT JOIN observation_period AS op
+  ON coh.subject_id=op.person_id
+LEFT JOIN concept AS c 
+  ON de.drug_concept_id=c.concept_id
+WHERE 
+  coh.cohort_definition_id = 4
+  AND de.drug_era_end_date <= coh.cohort_start_date;
+"
+drug <- querySql(connection = connection, sql = query_drug) |>
+  as.data.frame()
+
+drug_n <- drug %>% distinct(PERSON_ID, DRUG_NAME) %>%
+  group_by(PERSON_ID) %>%
+  summarise(count = n()) 
+
+```
+
+On average, patients took `r comma(mean(drug_n$count))` medications.
+
+#### Table 2. NSAIDs used in patients
+
+```{r}
+ drug_nsaid <- drug %>% distinct(PERSON_ID, DRUG_NAME) %>%
+   filter(DRUG_NAME %in% c("Aspirin", "celecoxib", "Diclofenac", "Ibuprofen", "Naproxen")) %>%
+     group_by(DRUG_NAME) %>%
+   summarise(COUNT=n()) %>%
+   mutate(`PERCENTAGE (%)` = round(COUNT/nrow(NSAIDs)*100,1)) %>%
+   arrange(desc(COUNT)) 
+
+ drug_nsaid %>%
+   kbl() %>%
+   kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+#### Table 3. List of drugs used (excluding NSAIDs)
+
+::: scrolling
+```{r}
+drug_x_nsaid <- drug %>% distinct(PERSON_ID, DRUG_NAME) %>%
+  filter(!DRUG_NAME %in% c("Aspirin", "celecoxib", "Diclofenac", "Ibuprofen", "Naproxen")) %>%
+  group_by(DRUG_NAME) %>%
+  summarise(COUNT=n()) %>%
+  mutate(`PERCENTAGE (%)` = round(COUNT/nrow(NSAIDs)*100,1)) %>%
+  arrange(desc(COUNT)) 
+drug_x_nsaid %>%
+  kbl() %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+:::
+
+## Baseline conditions
+
+### Allergies
+
+```{r}
+query_obs<- "SELECT 
+  obs.person_id,
+  obs.observation_concept_id,
+  obs.observation_date,
+  coh.cohort_start_date,
+  obs_concept_syn.concept_synonym_name AS obs_name
+FROM 
+  observation obs
+JOIN main.cohort coh
+  ON obs.person_id = coh.subject_id
+LEFT JOIN concept_synonym AS obs_concept_syn
+  ON obs.OBSERVATION_CONCEPT_ID=obs_concept_syn.concept_id
+WHERE 
+  coh.cohort_definition_id = 4
+  AND obs.observation_date <= coh.cohort_start_date;
+"
+obs <- DatabaseConnector::querySql(connection = connection, sql = query_obs) |>
+  as.data.frame()
+obs_n <- obs %>% distinct(PERSON_ID, OBS_NAME) %>%
+  group_by(PERSON_ID) %>%
+  summarise(count = n()) 
+obs_10 <- obs %>% distinct(PERSON_ID, OBS_NAME) %>%
+  mutate(OBS_NAME = gsub("\\s*\\(.*?\\)", "", OBS_NAME)) %>% # REMOVE TEXT IN PARENTHESIS
+  group_by(OBS_NAME) %>%
+  summarise(COUNT=n()) %>%
+  mutate(`PERCENTAGE (%)` = round(COUNT/nrow(NSAIDs)*100,1)) %>%
+  arrange(desc(COUNT)) 
+```
+
+There were `r length(unique(obs$PERSON_ID))` patients in the OBSERVATION dataset. Below is a table of their previous allergies.
+
+::: scrolling
+```{r}
+obs_10 %>%
+  kbl() %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+:::
+
+## Conditions at baseline
+
+```{r}
+query_condition <- "SELECT 
+  ce.person_id,
+  ce.condition_concept_id,
+  ce.condition_era_start_date,
+  ce.condition_era_end_date,
+  coh.cohort_start_date,
+  condition_concept.concept_name AS condition_name,
+  condition_concept.domain_id AS domain
+FROM 
+  condition_era ce
+JOIN main.cohort coh
+  ON ce.person_id = coh.subject_id
+LEFT JOIN observation_period AS op
+  ON coh.subject_id=op.person_id
+LEFT JOIN concept AS condition_concept 
+  ON ce.CONDITION_CONCEPT_ID=condition_concept.concept_id
+WHERE 
+  coh.cohort_definition_id = 4
+  AND ce.condition_era_start_date <= coh.cohort_start_date;
+"
+
+condition <- DatabaseConnector::querySql(connection = connection, sql = query_condition) |>
+  as.data.frame()
+
+condition_n <- condition %>% distinct(PERSON_ID, CONDITION_NAME) %>%
+  group_by(PERSON_ID) %>%
+  summarise(count = n()) 
+```
+
+There were `r length(unique(condition$CONDITION_NAME))` unique conditions for patients using NSAIDs in the CONDITION_ERA datasets. On average, people had **`r comma(mean(condition_n$count))`** conditions.
+
+#### Table 4. Conditions of patients using NSAIDs at baseline
+
+::: scrolling
+```{r}
+ condition_num <- condition %>% distinct(PERSON_ID, CONDITION_NAME) %>%
+  group_by(CONDITION_NAME) %>%
+  summarise(COUNT=n()) %>%
+  mutate(`PERCENTAGE (%)` = round(COUNT/nrow(NSAIDs)*100,1)) %>%
+  arrange(desc(COUNT)) 
+ condition_num%>%
+  kbl() %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+:::
+
+#### Compare conditions by gender
+
+```{r, message=FALSE, warning=FALSE}
+condition_gender <- condition %>% 
+  distinct(PERSON_ID, CONDITION_NAME) %>%
+  left_join(demo) %>%
+  group_by(CONDITION_NAME, GENDER) %>%
+  summarise(COUNT=n()) %>%
+  mutate(PERCENTAGE = if_else(GENDER == "FEMALE", 100*COUNT/nrow(demo[demo$GENDER == "FEMALE",]), 100*COUNT/nrow(demo[demo$GENDER=="MALE",])))
+
+condition_gender_select <- SharedData$new(condition_gender)
+```
+
+```{r echo=FALSE, message=FALSE}
+filter_select("CONDITION_GENDER", "Select conditions:", condition_gender_select, ~ CONDITION_NAME)
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+condition_gender_select %>% plot_ly(
+  x = ~ CONDITION_NAME,
+  y = ~ PERCENTAGE, 
+  color = ~GENDER, 
+  type = "bar") %>%
+  layout(
+    xaxis = list(title = "", categoryorder = "trace"))
+```
+
+## Post-index
+
+#### Table 5. Conditions post-index in patients using NSAIDs
+
+```{r echo = FALSE, message=FALSE}
+query_condition_post <- "SELECT
+  ce.person_id,
+  ce.condition_concept_id,
+  ce.condition_era_start_date,
+  ce.condition_era_end_date,
+  coh.cohort_start_date,
+  condition_concept.concept_name AS condition_name,
+  condition_concept.domain_id AS domain
+FROM 
+  condition_era ce
+JOIN main.cohort coh
+  ON ce.person_id = coh.subject_id
+LEFT JOIN observation_period AS op
+  ON coh.subject_id=op.person_id
+LEFT JOIN concept AS condition_concept 
+  ON ce.CONDITION_CONCEPT_ID=condition_concept.concept_id
+WHERE 
+  coh.cohort_definition_id = 4
+  AND ce.condition_era_start_date > coh.cohort_start_date;
+"
+
+condition_post <- DatabaseConnector::querySql(connection = connection, sql = query_condition_post) |>
+  as.data.frame()
+
+condition_post_n <- condition_post %>% distinct(PERSON_ID, CONDITION_NAME) %>%
+  group_by(PERSON_ID) %>%
+  summarise(count = n()) 
+```
+
+::: scrolling
+```{r echo=FALSE, message=FALSE}
+query_condition_ob <- "SELECT
+  co.person_id,
+  co.condition_concept_id,
+  co.condition_start_date,
+  co.condition_end_date,
+  coh.cohort_start_date,
+  condition_concept.concept_name AS condition_name,
+  condition_concept.domain_id AS domain
+FROM 
+  CONDITION_OCCURRENCE co
+JOIN main.cohort coh
+  ON co.person_id = coh.subject_id
+LEFT JOIN observation_period AS op
+  ON coh.subject_id=op.person_id
+LEFT JOIN concept AS condition_concept 
+  ON co.CONDITION_CONCEPT_ID=condition_concept.concept_id
+WHERE 
+  coh.cohort_definition_id = 4
+  AND co.condition_start_date <= coh.cohort_start_date;
+"
+
+condition_ob <- DatabaseConnector::querySql(connection = connection, sql = query_condition_ob) |>
+  as.data.frame()
+
+ condition_post_10 <- condition_post %>% distinct(PERSON_ID, CONDITION_NAME) %>%
+  group_by(CONDITION_NAME) %>%
+  summarise(COUNT=n()) %>%
+  mutate(`PERCENTAGE (%)` = round(COUNT/nrow(NSAIDs)*100,1)) %>%
+  arrange(desc(COUNT)) 
+ condition_post_10 %>%
+  kbl() %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+:::
+
+```{r echo=FALSE, message=FALSE}
+condition_all <- condition %>% distinct(PERSON_ID, CONDITION_NAME) %>%
+  group_by(CONDITION_NAME) %>%
+  summarise(COUNT_PRE=n()) 
+condition_post_all <- condition_post %>% distinct(PERSON_ID, CONDITION_NAME) %>%
+  group_by(CONDITION_NAME) %>%
+  summarise(COUNT_POST=n()) 
+condition_x <- condition_all %>% 
+  full_join(condition_post_all) %>%
+  mutate_all(tidyr::replace_na,0) %>%
+  tidyr::pivot_longer(!CONDITION_NAME, names_to = "time", values_to = "COUNT") %>%
+  mutate(TIME = if_else(time == "COUNT_PRE", 1, 2))
+
+condition_all_select <- SharedData$new(condition_x)
+```
+
+#### Compare conditions pre- and post- index:
+
+```{r echo=FALSE, message=FALSE}
+filter_select("CONDITION_NAME", "Select conditions:", condition_all_select, ~ CONDITION_NAME)
+```
+
+```{js}
+function filter_default() {
+    document.getElementById("CONDITION_NAME").getElementsByClassName("selectized") 
+[0].selectize.setValue("Gastrointestinal hemorrhage", false);
+    document.getElementById("CONDITION_GENDER").getElementsByClassName("selectized") 
+[0].selectize.setValue("Acute bronchitis", false);
+ }
+$(document).ready(filter_default);
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+condition_all_select %>% plot_ly(
+  x = ~ TIME,
+  y = ~ COUNT, 
+  color = ~CONDITION_NAME, 
+  type = "scatter", 
+  mode = "markers+lines") %>%
+  layout(xaxis = list(
+    title = "", 
+    ticktext = list("Pre-index", "Post-index"), 
+    tickvals = list(1,2), 
+    tickmode = "array"))
+  
+```

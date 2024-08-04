@@ -30,3 +30,5 @@ sql <- "SELECT * FROM main.cohort WHERE COHORT_DEFINITION_ID = 3;"
 tb <- DatabaseConnector::querySql(connection = connection, sql = sql) |>
   tibble::as_tibble()
 tb
+
+
