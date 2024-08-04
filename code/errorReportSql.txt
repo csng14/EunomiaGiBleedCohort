@@ -1,0 +1,48 @@
+DBMS:
+sqlite
+
+Error:
+no such column: vis_concept.CONCEPT_ID
+
+SQL:
+SELECT mm.*, mm_concept.concept_name AS mm_name
+FROM measurement mm
+LEFT JOIN concept AS mm_concept
+  ON mm.MEASUREMENT_CONCEPT_ID=vis_concept.CONCEPT_ID
+WHERE MM.person_id IN (
+    SELECT subject_id
+    FROM main.cohort coh
+    WHERE COHORT_DEFINITION_ID = 4 and mm.measurement_date >= coh.cohort_start_date
+);
+
+R version:
+R version 4.2.3 (2023-03-15)
+
+Platform:
+x86_64-apple-darwin17.0
+
+Attached base packages:
+- stats
+- graphics
+- grDevices
+- utils
+- datasets
+- methods
+- base
+
+Other attached packages:
+- table1 (1.4.3)
+- kableExtra (1.4.0)
+- crosstalk (1.2.1)
+- plotly (4.10.4)
+- shiny (1.9.1)
+- CohortMethod (5.3.0)
+- FeatureExtraction (3.6.0)
+- Andromeda (0.6.6)
+- Cyclops (3.4.1)
+- DatabaseConnector (6.3.2)
+- ggplot2 (3.5.1)
+- this.path (2.5.0)
+- knitr (1.48)
+- dplyr (1.1.4)
+- Eunomia (2.0.0)

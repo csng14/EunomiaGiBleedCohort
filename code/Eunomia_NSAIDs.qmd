@@ -29,8 +29,7 @@ Methodology:
 
 Analysis provides insights into NSAID initiation patterns and potential outcomes, contributing to healthcare analytics discussions on NSAID safety.
 
-```{r setup, echo=FALSE, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+```{r setup, message=FALSE, warning=FALSE, echo=FALSE}
 library(Eunomia)
 library(DatabaseConnector)
 library(tidyverse)
@@ -65,7 +64,11 @@ createCohorts(connectionDetails = connectionDetails)
 ## Study population
 
 ```{r}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 sql <- "SELECT * FROM main.cohort WHERE COHORT_DEFINITION_ID = 4;"
+
 NSAIDs <- querySql(connection = connection, sql = sql) |>
   as.data.frame()
 
@@ -87,14 +90,13 @@ demo <- demo %>%
   mutate(age = as.numeric(as.Date(COHORT_START_DATE)-as.Date(BIRTH_DATETIME))/365.25)
 
 comma <- function(x) format(x, digits = 2, big.mark = ",")
-
 ```
 
 There are **`r comma(nrow(NSAIDs))`** patients in the cohort who initiated NSAID use.
 
 #### Table 1. Characteristics of patients using NSAIDs
 
-```{r, message=FALSE, warning=FALSE}
+```{r, message=FALSE, warning=FALSE, echo=FALSE}
 pvalue <- function(x, ...) {
   x <- x[-length(x)]  # Remove "overall" group
   # Construct vectors of data y, and groups (strata) g
@@ -111,6 +113,11 @@ pvalue <- function(x, ...) {
   # The initial empty string places the output on the line below the variable label.
   c("", sub("<", "&lt;", format.pval(p, digits=3, eps=0.001)))
 }
+```
+
+```{r}
+#| code-fold: true
+#| code-summary: "Expand for full code"
 
 x <- table1(~age+RACE_SOURCE_VALUE| GENDER, data=demo,extra.col=list(`P-value`=pvalue), extra.col.pos=3)
 
@@ -122,6 +129,9 @@ x %>%
 ## Drug use at baseline
 
 ```{r}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 query_drug <- "SELECT 
   de.*,
   coh.cohort_start_date,
@@ -145,7 +155,6 @@ drug <- querySql(connection = connection, sql = query_drug) |>
 drug_n <- drug %>% distinct(PERSON_ID, DRUG_NAME) %>%
   group_by(PERSON_ID) %>%
   summarise(count = n()) 
-
 ```
 
 On average, patients took **`r round(mean(drug_n$count),0)`** medications.
@@ -153,6 +162,9 @@ On average, patients took **`r round(mean(drug_n$count),0)`** medications.
 #### Table 2. NSAIDs used in patients
 
 ```{r}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
  drug_nsaid <- drug %>% 
   distinct(PERSON_ID, DRUG_NAME) %>%
   filter(DRUG_NAME %in% c("Aspirin", "celecoxib", "Diclofenac", "Ibuprofen", "Naproxen")) %>%
@@ -170,6 +182,9 @@ On average, patients took **`r round(mean(drug_n$count),0)`** medications.
 
 ::: scrolling
 ```{r}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 drug_x_nsaid <- drug %>% distinct(PERSON_ID, DRUG_NAME) %>%
   filter(!DRUG_NAME %in% c("Aspirin", "celecoxib", "Diclofenac", "Ibuprofen", "Naproxen")) %>%
   group_by(DRUG_NAME) %>%
@@ -187,6 +202,9 @@ drug_x_nsaid %>%
 ### Allergies
 
 ```{r}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 query_obs<- "SELECT 
   obs.*,
   coh.cohort_start_date,
@@ -220,6 +238,9 @@ There were `r length(unique(obs$PERSON_ID))` patients in the OBSERVATION dataset
 
 ::: scrolling
 ```{r}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 obs_10 %>%
   kbl() %>%
   kable_styling(bootstrap_options = c("striped", "hover"))
@@ -229,6 +250,9 @@ obs_10 %>%
 ## Conditions at baseline
 
 ```{r}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 query_condition <- "SELECT 
   ce.*,
   coh.cohort_start_date,
@@ -261,6 +285,9 @@ There were `r length(unique(condition$CONDITION_NAME))` unique conditions for pa
 
 ::: scrolling
 ```{r}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
  condition_num <- condition %>% distinct(PERSON_ID, CONDITION_NAME) %>%
   group_by(CONDITION_NAME) %>%
   summarise(COUNT=n()) %>%
@@ -275,6 +302,9 @@ There were `r length(unique(condition$CONDITION_NAME))` unique conditions for pa
 #### Compare conditions by gender
 
 ```{r, message=FALSE, warning=FALSE}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 condition_gender <- condition %>% 
   distinct(PERSON_ID, CONDITION_NAME) %>%
   left_join(demo) %>%
@@ -286,10 +316,16 @@ condition_gender_select <- SharedData$new(condition_gender)
 ```
 
 ```{r echo=FALSE, message=FALSE}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 filter_select("CONDITION_GENDER", "Select conditions:", condition_gender_select, ~ CONDITION_NAME)
 ```
 
-```{r echo=FALSE, warning=FALSE, message=FALSE}
+```{r warning=FALSE, message=FALSE}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 condition_gender_select %>% plot_ly(
   x = ~ CONDITION_NAME,
   y = ~ PERCENTAGE, 
@@ -303,7 +339,10 @@ condition_gender_select %>% plot_ly(
 
 #### Table 6. Conditions post-index in patients using NSAIDs
 
-```{r echo = FALSE, message=FALSE}
+```{r message=FALSE}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 query_condition_post <- "SELECT
   ce.*,
   coh.cohort_start_date,
@@ -331,7 +370,10 @@ condition_post_n <- condition_post %>% distinct(PERSON_ID, CONDITION_NAME) %>%
 ```
 
 ::: scrolling
-```{r echo=FALSE, message=FALSE}
+```{r message=FALSE}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 query_condition_ob <- "SELECT
   co.*,
   coh.cohort_start_date,
@@ -364,7 +406,10 @@ condition_ob <- DatabaseConnector::querySql(connection = connection, sql = query
 ```
 :::
 
-```{r echo=FALSE, message=FALSE}
+```{r message=FALSE}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 condition_all <- condition %>% distinct(PERSON_ID, CONDITION_NAME) %>%
   group_by(CONDITION_NAME) %>%
   summarise(COUNT_PRE=n()) 
@@ -382,7 +427,10 @@ condition_all_select <- SharedData$new(condition_x)
 
 #### Compare conditions pre- and post- index:
 
-```{r echo=FALSE, message=FALSE}
+```{r message=FALSE}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 filter_select("CONDITION_NAME", "Select conditions:", condition_all_select, ~ CONDITION_NAME)
 ```
 
@@ -396,7 +444,10 @@ function filter_default() {
 $(document).ready(filter_default);
 ```
 
-```{r echo=FALSE, warning=FALSE, message=FALSE}
+```{r warning=FALSE, message=FALSE}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 condition_all_select %>% plot_ly(
   x = ~ TIME,
   y = ~ COUNT, 
@@ -413,6 +464,9 @@ condition_all_select %>% plot_ly(
 ##### Patients with GI Bleed
 
 ```{r, message=FALSE}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 GI <- condition_post %>% 
   filter(CONDITION_CONCEPT_ID==192671) %>%
   left_join(demo)
@@ -423,7 +477,10 @@ The incidence of GI bleeding increased from **`r comma(nrow(condition[condition$
 #### Table 7. Conditions that have increased post-NSAID use.
 
 ::: scrolling
-```{r, message=FALSE, echo=FALSE}
+```{r, message=FALSE}
+#| code-fold: true
+#| code-summary: "Expand for full code"
+
 condition_increase <- condition_all %>% 
   full_join(condition_post_all) %>%
   mutate_all(tidyr::replace_na,0) %>%
