@@ -1,11 +1,38 @@
 ---
-title: "NSAIDs patients using Eunomia"
+title: "NSAIDs patients using Eunomia: an exploratory analysis"
 author: "Carmen Ng"
 title-block-banner: true
 theme: yeti
 format: html
 editor: visual
+self-contained: true
 ---
+
+## Executive summary: NSAID Drug Initiation Analysis
+
+Conducted exploratory analysis on patients initiating NSAIDs using synthetic OMOP CDM v5.4 database. NSAID cohort defined as Cohort_Definition_ID=4.
+
+**Key aspects analyzed:**
+
+Demographics:
+
+-   Age and gender distribution
+
+-   Baseline conditions
+
+-   Baseline drug use
+
+-   Post-index outcomes, particularly GI bleeding (Condition Concept ID 192671)
+
+Methodology:
+
+-   Used Quarto for dynamic reporting
+
+-   Created visual representations for clarity
+
+-   Organized code and documentation in GitHub repository
+
+Analysis provides insights into NSAID initiation patterns and potential outcomes, contributing to healthcare analytics discussions on NSAID safety.
 
 ```{r setup, echo=FALSE, include=FALSE}
 knitr::opts_chunk$set(echo = FALSE)
@@ -67,7 +94,7 @@ comma <- function(x) format(x, digits = 2, big.mark = ",")
 
 ```
 
-There are `r comma(nrow(NSAIDs))` patients in the cohort who initiated NSAID use.
+There are **`r comma(nrow(NSAIDs))`** patients in the cohort who initiated NSAID use.
 
 #### Table 1. Characteristics of patients using NSAIDs
 
@@ -128,7 +155,7 @@ drug_n <- drug %>% distinct(PERSON_ID, DRUG_NAME) %>%
 
 ```
 
-On average, patients took `r comma(mean(drug_n$count))` medications.
+On average, patients took **`r round(mean(drug_n$count),0)`** medications.
 
 #### Table 2. NSAIDs used in patients
 
@@ -195,7 +222,9 @@ obs_10 <- obs %>% distinct(PERSON_ID, OBS_NAME) %>%
   arrange(desc(COUNT)) 
 ```
 
-There were `r length(unique(obs$PERSON_ID))` patients in the OBSERVATION dataset. Below is a table of their previous allergies.
+There were `r length(unique(obs$PERSON_ID))` patients in the OBSERVATION dataset. Below is a table of their previous allergies. No patients were allergic to NSAIDs.
+
+#### Table 4. Allergies of patients
 
 ::: scrolling
 ```{r}
@@ -239,7 +268,7 @@ condition_n <- condition %>% distinct(PERSON_ID, CONDITION_NAME) %>%
 
 There were `r length(unique(condition$CONDITION_NAME))` unique conditions for patients using NSAIDs in the CONDITION_ERA datasets. On average, people had **`r comma(mean(condition_n$count))`** conditions.
 
-#### Table 4. Conditions of patients using NSAIDs at baseline
+#### Table 5. Conditions of patients using NSAIDs at baseline
 
 ::: scrolling
 ```{r}
@@ -283,7 +312,7 @@ condition_gender_select %>% plot_ly(
 
 ## Post-index
 
-#### Table 5. Conditions post-index in patients using NSAIDs
+#### Table 6. Conditions post-index in patients using NSAIDs
 
 ```{r echo = FALSE, message=FALSE}
 query_condition_post <- "SELECT
@@ -396,5 +425,14 @@ condition_all_select %>% plot_ly(
     ticktext = list("Pre-index", "Post-index"), 
     tickvals = list(1,2), 
     tickmode = "array"))
-  
 ```
+
+#### Patients with GI Bleed
+
+```{r, message=FALSE}
+GI <- condition_post %>% 
+  filter(CONDITION_CONCEPT_ID==192671) %>%
+  left_join(demo)
+```
+
+The incidence of GI bleeding increased from **`r comma(nrow(condition[condition$CONDITION_CONCEPT_ID == 192671,])/nrow(demo))`%** to **`r comma(nrow(GI)/nrow(demo)*100)`%** following NSAID initiation.
