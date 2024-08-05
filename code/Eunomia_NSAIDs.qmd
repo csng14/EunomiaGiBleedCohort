@@ -29,7 +29,8 @@ Methodology:
 
 Analysis provides insights into NSAID initiation patterns and potential outcomes, contributing to healthcare analytics discussions on NSAID safety.
 
-```{r setup, message=FALSE, warning=FALSE, echo=FALSE}
+```{r setup, message=FALSE, warning=FALSE, echo=FALSE, include=FALSE}
+
 library(Eunomia)
 library(DatabaseConnector)
 library(tidyverse)
@@ -63,7 +64,7 @@ createCohorts(connectionDetails = connectionDetails)
 ```
 ## Study population
 
-```{r}
+```{r message=FALSE, warning=FALSE, include=FALSE}
 #| code-fold: true
 #| code-summary: "Expand for full code"
 
@@ -115,7 +116,7 @@ pvalue <- function(x, ...) {
 }
 ```
 
-```{r}
+```{r warning=FALSE, message=FALSE}
 #| code-fold: true
 #| code-summary: "Expand for full code"
 
@@ -339,6 +340,7 @@ condition_gender_select %>% plot_ly(
 
 #### Table 6. Conditions post-index in patients using NSAIDs
 
+::: scrolling
 ```{r message=FALSE}
 #| code-fold: true
 #| code-summary: "Expand for full code"
@@ -367,12 +369,6 @@ condition_post <- DatabaseConnector::querySql(connection = connection, sql = que
 condition_post_n <- condition_post %>% distinct(PERSON_ID, CONDITION_NAME) %>%
   group_by(PERSON_ID) %>%
   summarise(count = n()) 
-```
-
-::: scrolling
-```{r message=FALSE}
-#| code-fold: true
-#| code-summary: "Expand for full code"
 
 query_condition_ob <- "SELECT
   co.*,
@@ -434,7 +430,7 @@ condition_all_select <- SharedData$new(condition_x)
 filter_select("CONDITION_NAME", "Select conditions:", condition_all_select, ~ CONDITION_NAME)
 ```
 
-```{js}
+```{js, echo=FALSE}
 function filter_default() {
     document.getElementById("CONDITION_NAME").getElementsByClassName("selectized") 
 [0].selectize.setValue("Gastrointestinal hemorrhage", false);
